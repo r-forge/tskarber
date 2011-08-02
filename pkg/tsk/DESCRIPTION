@@ -1,5 +1,5 @@
 Package: tsk
-Version: 0.1
+Version: 1.0
 Title: Trimmed Spearman-Karber Method
 Author@R: c(person(given=c("Brenton", "R."), "Stone", email = "brstone@ufl.edu"))
 Author: Brenton R. Stone <brstone@ufl.edu>
