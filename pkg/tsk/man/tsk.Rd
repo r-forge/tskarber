@@ -34,7 +34,7 @@ intervals.}
 will be taken and used for calculation.}
   \item{...}{further arguments to be passed to or from methods.}
 }
-\value{A list containing the following components:
+\value{A list of type "tskresult" containing the following components:
   \item{use.log.doses}{same as above.}
   \item{trim}{same as above.}
   \item{ED50}{The estimated effective dose for 50 percent of the 
