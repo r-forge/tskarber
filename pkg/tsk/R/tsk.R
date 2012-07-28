@@ -2,7 +2,7 @@ tsk <- function (...) UseMethod ("tsk")
 
 tsk.default <-
   function (x,n,r, control = 0, trim = 0, conf.level = 0.95,
-            use.log.doses = TRUE, ...)
+            use.log.doses = TRUE,...)
   {
     input <- data.frame(x=x,n=n,r=r)
     tsk(input,control,trim,conf.level,use.log.doses,...)
@@ -37,39 +37,29 @@ tsk.data.frame <-
     input <- input[order(input$x), ]
   }
   N <- length(input$x)
-###---MASSAGE THE DATA-------------------------------------------
+###---TRANSFORM THE DATA-------------------------------------------
   if (use.log.doses) {
     input$x <- log10(input$x)
   }
-  data.smoothed <- data.frame(input,p=input$r/input$n)
-### Smooth by fixing nondecreasingness, as per the first step in
-### Hamilton. There is probably a more efficient way to do this
-### but this is what's in Hamilton. It does not seem to add much
-### to the execution time, even though if there's more than one
-### nondecreasing point it will iterate until it reaches machine
-### epsilon.
-  is.smoothed <- FALSE
-  i <- 1L
-  while (any(data.smoothed$p[1L:(N - 1L)] > data.smoothed$p[2L:N])) {
-    is.smoothed <- TRUE            
-    if (data.smoothed$p[i] > data.smoothed$p[i + 1L]) {
-      p.smoothed <- (data.smoothed$r[i]+data.smoothed$r[i+1L])/
-        (data.smoothed$n[i] + data.smoothed$n[i + 1L])
-      r.smoothed <- (data.smoothed$r[i]+data.smoothed$r[i+1L])/2
-      data.smoothed$p[i] <- p.smoothed
-      data.smoothed$p[i + 1L] <- p.smoothed
-      data.smoothed$r[i] <- r.smoothed
-      data.smoothed$r[i+1L] <- r.smoothed  
-    }
-    if (i >= (N-1L)){
-      i <- 1L
-    } else {
-      i <- i+1L
-    }
+  data.smoothed <- data.frame(input, p = input$r/input$n)
+### Fix nondecreasingness, as per the first step in
+### Hamilton. What Hamilton describes is equivalent to the
+### pool-adjacent-violators algorithm, so gpava is used here. 
+### PAVA was published 11 years after Hamilton's paper, so I 
+### can't blame them for not knowing about it. See:
+### http://stackoverflow.com/questions/11423846/
+### smoothing-a-sequence-without-using-a-loop-in-r
+  needs.smooth <- is.unsorted(data.smoothed$p)
+  if(needs.smooth){
+    data.smoothed$p <- gpava(z = data.smoothed$x,
+                             y = data.smoothed$p,
+                             weights = data.smoothed$n)$x
+    data.smoothed$r <- data.smoothed$p*data.smoothed$n
   }
-  
+
 ###Correct for the control dose.
   data.smoothed$p <- (data.smoothed$p-control)/(1-control)
+
 ###---SCALE AND TRIM---------------------------------------------
 ### As per steps 2 and 3 in Hamilton
   data.scaled <- data.smoothed
@@ -81,28 +71,28 @@ tsk.data.frame <-
          "Consider using this trim: ", trim.maybe)
   }
 ### Linearly interpolate points where the lines p=0 and p=1 meet
-### the trim. NOTE: From this point on, there is a variable
-### called L. This makes the parts with integer literals denoted
-### by L kind of hard to read.
+### the trim.
   Larray <- which(data.scaled$p <= 0)
-  L <- Larray[length(Larray)]
+  ln <- Larray[length(Larray)]
   Uarray <- which(data.scaled$p >= 1)
-  U <- Uarray[1L]
+  un <- Uarray[1L]
   keepers <- data.scaled[(data.scaled$p >= 0) & (data.scaled$p <= 1), ]
   trimx <- keepers$x
   trimp <- keepers$p
-### There's some voodoo with the approx interpolation function
+### There's some silliness with the approx interpolation function
 ### here... it doesn't work right if there are mulitple doses
 ### with the same p-values, and ordered, min, max, etc. don't do
 ### what I want. Subscripting seemed more efficient than building
 ### a function to pass to approx to make it work right.
-  if (data.scaled$p[L]!=0){
-    interx <- approx(data.scaled$p[L:(L+1)], data.scaled$x[L:(L+1)], 0)$y
+  if (data.scaled$p[ln]!=0){
+    interx <- approx(data.scaled$p[ln:(ln+1)], 
+                     data.scaled$x[ln:(ln+1)], 0)$y
     trimx <- c(interx,trimx)
     trimp <- c(0,trimp)
   } 
-  if (data.scaled$p[U]!=1){
-    interx <- approx(data.scaled$p[(U-1):U], data.scaled$x[(U-1):U], 1)$y
+  if (data.scaled$p[un]!=1){
+    interx <- approx(data.scaled$p[(un-1):un], 
+                     data.scaled$x[(un-1):un], 1)$y
     trimx <- c(trimx,interx)
     trimp <- c(trimp,1)
   }
@@ -117,85 +107,89 @@ tsk.data.frame <-
 ###---FIND THE VARIANCE-&-CONF-INTERVAL--------------------------
 ### Appendix in Hamilton
   V1 <-
-    function (data, trim, L, U) 
+    function (data, trim, ln, un) 
       {
-        return(((data$x[L + 1] - data$x[L]) * (data$p[L + 1] - trim)^2/
-                (data$p[L + 1] - data$p[L])^2)^2 *
-               data$p[L] * (1 - data$p[L])/data$n[L])
+        return(((data$x[ln + 1] - data$x[ln]) * (data$p[ln + 1] - trim)^2/
+                (data$p[ln + 1] - data$p[ln])^2)^2 *
+               data$p[ln] * (1 - data$p[ln])/data$n[ln])
       }
   V2 <-
-    function (data, trim, L, U) 
+    function (data, trim, ln, un) 
       {
-        return(((data$x[L] - data$x[L + 2]) + (data$x[L + 1] - data$x[L]) * 
-                (trim - data$p[L])^2/(data$p[L + 1L] - data$p[L])^2)^2 * 
-               data$p[L + 1] * (1 - data$p[L + 1])/data$n[L + 1])
+        return(((data$x[ln] - data$x[ln + 2]) + 
+                (data$x[ln + 1] - data$x[ln]) * 
+                (trim - data$p[ln])^2/(data$p[ln + 1] - data$p[ln])^2)^2 * 
+               data$p[ln + 1] * (1 - data$p[ln + 1])/data$n[ln + 1])
       }
   V3 <-
-    function (data, trim, L, U) 
+    function (data, trim, ln, un) 
       {
-        v3 <- ((data$x[(L + 1):(U - 3)] - data$x[(L + 3):(U - 1)])^2 *
-               data$p[(L + 2):(U - 2)] * (1 - data$p[(L + 2):(U - 2)])/
-               data$n[(L + 2):(U - 2)])
+        v3 <- ((data$x[(ln + 1):(un - 3)] - data$x[(ln + 3):(un - 1)])^2 *
+               data$p[(ln + 2):(un - 2)] * (1 - data$p[(ln + 2):(un - 2)])/
+               data$n[(ln + 2):(un - 2)])
         return(sum(v3))
       }
   V4 <-
-    function (data, trim, L, U) 
+    function (data, trim, ln, un) 
       {
-        return(((data$x[U - 2] - data$x[U]) + (data$x[U] - data$x[U - 1]) *
-                (data$p[U] - 1 + trim)^2/
-                (data$p[U] - data$p[U - 1])^2)^2 * data$p[U - 1] *
-               (1 - data$p[U - 1])/data$n[U - 1])
+        return(((data$x[un - 2] - data$x[un]) + 
+                (data$x[un] - data$x[un - 1]) *
+                (data$p[un] - 1 + trim)^2/
+                (data$p[un] - data$p[un - 1])^2)^2 * data$p[un - 1] *
+               (1 - data$p[un - 1])/data$n[un - 1])
       }
   V5 <-
-    function (data, trim, L, U) 
+    function (data, trim, ln, un) 
       {
-        return(((data$x[U] - data$x[U - 1]) * (1 - trim - data$p[U - 1])^2/
-                (data$p[U] - data$p[U - 1])^2)^2 * data$p[U] * 
-               (1 - data$p[U])/data$n[U])
+        return(((data$x[un] - data$x[un - 1]) * 
+                (1 - trim - data$p[un - 1])^2/
+                (data$p[un] - data$p[un - 1])^2)^2 * data$p[un] * 
+               (1 - data$p[un])/data$n[un])
       }
   V6 <-
-    function (data, trim, L, U) 
+    function (data, trim, ln, un) 
       {
-        return(((data$x[U] - data$x[L + 1]) * (1 - trim - data$p[U])^2/
-                (data$p[U] - data$p[L + 1])^2 -
-                (data$x[L + 1] - data$x[L]) *
-                (trim - data$p[L])^2/(data$p[L + 1] - data$p[L])^2 +
-                (data$x[L] - data$x[U]))^2 * data$p[L + 1] *
-               (1 - data$p[L + 1])/data$n[L + 1])
+        return(((data$x[un] - data$x[ln + 1]) * 
+                (1 - trim - data$p[un])^2/
+                (data$p[un] - data$p[ln + 1])^2 -
+                (data$x[ln + 1] - data$x[ln]) *
+                (trim - data$p[ln])^2/(data$p[ln + 1] - data$p[ln])^2 +
+                (data$x[ln] - data$x[un]))^2 * data$p[ln + 1] *
+               (1 - data$p[ln + 1])/data$n[ln + 1])
       }
   
-  s <- U - L
+  s <- un - ln
   if (s <= 0L) {
     Var <- (NaN)
   }
   else if (s == 1L) {
-    Var <- (data.smoothed$x[U] - data.smoothed$x[L])^2 *
-      ((0.5 - data.smoothed$p[U])^2/
-       (data.smoothed$p[U] - data.smoothed$p[L])^4 *
-       data.smoothed$p[L] *
-       (1 - data.smoothed$p[L])/data.smoothed$n[L] +
-       (0.5 - data.smoothed$p[L])^2/
-       (data.smoothed$p[U] - data.smoothed$p[L])^4 *
-       data.smoothed$p[U] *
-       (1 - data.smoothed$p[U])/data.smoothed$n[U])
+    Var <- (data.smoothed$x[un] - data.smoothed$x[ln])^2 *
+      ((0.5 - data.smoothed$p[un])^2/
+       (data.smoothed$p[un] - data.smoothed$p[ln])^4 *
+       data.smoothed$p[ln] *
+       (1 - data.smoothed$p[ln])/data.smoothed$n[ln] +
+       (0.5 - data.smoothed$p[ln])^2/
+       (data.smoothed$p[un] - data.smoothed$p[ln])^4 *
+       data.smoothed$p[un] *
+       (1 - data.smoothed$p[un])/data.smoothed$n[un])
   }
   else if (s == 2L) {
-    Var <- (V1(data.smoothed, trim, L, U) +
-            V5(data.smoothed, trim, L, U) +
-            V6(data.smoothed, trim, L, U))/(2 - 4 * trim)^2
+    Var <- (V1(data.smoothed, trim, ln, un) +
+            V5(data.smoothed, trim, ln, un) +
+            V6(data.smoothed, trim, ln, un))/(2 - 4 * trim)^2
   }
   else if (s == 3L) {
-    Var <- (V1(data.smoothed, trim, L, U) +
-            V2(data.smoothed, trim, L, U) +
-            V4(data.smoothed, trim, L, U) +
-            V5(data.smoothed, trim, L, U))/(2 - 4 * trim)^2
+    Var <- (V1(data.smoothed, trim, ln, un) +
+            V2(data.smoothed, trim, ln, un) +
+            V4(data.smoothed, trim, ln, un) +
+            V5(data.smoothed, trim, ln, un))/(2 - 4 * trim)^2
   }
   else {
-    Var <- (V1(data.smoothed, trim, L, U) +
-            V2(data.smoothed, trim, L, U) +
-            V3(data.smoothed, trim, L, U) +
-            V4(data.smoothed, trim, L, U) +
-            V5(data.smoothed, trim, L, U))/(2 - 4 * trim)^2
+    Var <- (V1(data.smoothed, trim, ln, un) +
+            V2(data.smoothed, trim, ln, un) +
+            V3(data.smoothed, trim, ln, un) +
+            V4(data.smoothed, trim, ln, un) +
+            V5(data.smoothed, trim, ln, un))/(2 - 4 * trim)^2
   }
         
   sd <- sqrt(Var)
@@ -214,7 +208,7 @@ tsk.data.frame <-
     names(gsd) <- "geometric standard deviation of LD50 estimate"
     rval <- list(use.log.doses=use.log.doses,
                  trim=trim,
-                 is.smoothed=is.smoothed,
+                 was.smoothed=needs.smooth,
                  LD50=LD50,
                  gsd=gsd,
                  conf.int = cint)
@@ -223,7 +217,7 @@ tsk.data.frame <-
     names(sd) <- "standard deviation of LD50 estimate"
     rval <- list(use.log.doses=use.log.doses,
                  trim=trim,
-                 is.smoothed=is.smoothed,
+                 was.smoothed=needs.smooth,
                  mu = mu,
                  sd = sd,
                  conf.int = cint)
@@ -236,12 +230,19 @@ print.tskresult <- function(x,...)
   {
     cat("\n")
     trimpercent <- x$trim*100
-    cat("Trimmed Spearman-Karber method using", trimpercent, "percent trim\n\n")
-    cat("Data was smoothed: ")
-    cat(x$is.smoothed)
+    cat("Trimmed Spearman-Karber method using", 
+        trimpercent, "percent trim\n\n")
+    if(x$was.smoothed){
+      cat("Data was smoothed")
+    } else {
+      cat("Data was not smoothed")
+    }
     cat("\n")
-    cat("Calculation done using the logs of the doses: ")
-    cat(x$use.log.doses)
+    if(x$use.log.doses){
+      cat("Calculation done using the logs of the doses")
+    }else{
+      cat("Calculation done using the raw doses (no log transform) ")      
+    }
     cat("\n")
     cat("Estimated LD50: ")
     if (x$use.log.doses) {

@@ -37,16 +37,16 @@ will be taken and used for calculation.}
 \value{A list of type "tskresult" containing the following components:
   \item{use.log.doses}{same as above.}
   \item{trim}{same as above.}
-  \item{ED50}{The estimated effective dose for 50 percent of the 
+  \item{LD50}{The estimated effective dose for 50 percent of the 
 population.}
-  \item{gsd}{The geometric standard deviation of the ED50 
+  \item{gsd}{The geometric standard deviation of the LD50 
 estimate.}
   \item{conf.level}{same as above.}
   \item{conf.int}{A confidence interval for the measurement, at 
 the level of conf.level.}
-If use.log.doses = FALSE, instead of ED50 and gsd, the list will 
+If use.log.doses = FALSE, instead of LD50 and gsd, the list will 
 contain:
-\item{mu}{The estimated ED50, given a different name to prevent 
+\item{mu}{The estimated LD50, given a different name to prevent 
 confusion with calculations on a log scale}
 \item{sd}{The standard deviation of the mu estimate.}
 }
@@ -80,5 +80,6 @@ dr <- data.frame( x=c(1, 10, 100, 1000), n=c(20, 20, 19, 20),
 tsk( dr, 0, 0.1, 0.99 )
 
 data(hamilton)
-tsk(hamilton$dr1a)}
+tsk(hamilton$dr1a)
+}
 
