@@ -50,7 +50,13 @@ contain:
 confusion with calculations on a log scale}
 \item{sd}{The standard deviation of the mu estimate.}
 }
-
+\note{This code expects the data to have an increasing slope once smoothed. 
+However, some studies may result in data with a decreasing trend. For 
+instance, one user had data measuring the survival of freshwater fish under 
+increasing water salinity: at low salinity all fish survive, while at high 
+salinity all fish die. If using data with a decreasing trend, simply use the 
+opposite response, e.g., swap the count that survive for the count that do 
+not, or replace r with n-r.}
 \note{This code was validated using the data given in Hamilton et 
 al. (1977) Note that the confidence intervals given in Hamilton 
 et al. (1977) are incorrect, as per Hamilton et al. (1978). This 

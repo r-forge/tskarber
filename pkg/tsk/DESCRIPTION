@@ -1,11 +1,11 @@
 Package: tsk
-Version: 1.1
-Date: 2012-07-12
+Version: 1.2
+Date: 2015-12-28
 Title: Trimmed Spearman-Karber Method
 Author@R: c(person(given=c("Brenton", "R."), "Stone", email = "brstone@ufl.edu"))
 Author: Brenton R. Stone <brstone@ufl.edu>
 Maintainer: Brenton R. Stone <brstone@ufl.edu>
 Description: A simple nonparametric method to determine median effective doses (LD50, etc.) from dose-response curves. 
-Depends: isotone
+Imports: isotone
 License: GPL (>=2)
 URL: https://r-forge.r-project.org/projects/tskarber/

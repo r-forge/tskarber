@@ -67,8 +67,12 @@ tsk.data.frame <-
   if (data.scaled$p[1L] > 0 || data.scaled$p[length(data.scaled$p)] < 1) {
     trim.maybe <- max(data.smoothed$p[1L],
                       1 - data.smoothed$p[length(data.scaled$p)])
-    stop("Responses do not cover the space between trim and 1-trim. ",
-         "Consider using this trim: ", trim.maybe)
+                      
+    stop("After smoothing, the responses do not increase from trim to 1-trim. 
+		If the data contains a decreasing set of responses, use the opposite 
+		response: i.e. if the data has death counts, use counts of subjects 
+		left alive instead. 
+		If that is not the issue, consider using this trim: ", trim.maybe)         
   }
 ### Linearly interpolate points where the lines p=0 and p=1 meet
 ### the trim.
